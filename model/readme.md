@@ -2,7 +2,7 @@
 *Responsable : Julien Segonne*
 
 ## TODO :
-- Conception du réseau de neuronne (UNET modifié dans le papier DDPM)
+- Conception du réseau de neurones (UNET modifié dans le papier DDPM)
 - target : prédire le bruit ε_θ(x_t, t) à partir d’une image bruitée et du temps t.
 - Bonne chance 😨
 
