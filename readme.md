@@ -21,9 +21,12 @@ Implementation du papier
 │   └── tests/
 │   └── readme.md
 ├── diffusion/
+│   ├── __init__.py
 │   ├── diffusion.py
-│   └── tests/
 │   └── readme.md
+│   └── tests/
+│         ├── test.py
+│         └── images/
 ├── scripts/
 │   ├── train.py
 │   └── generate.py

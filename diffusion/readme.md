@@ -9,7 +9,7 @@
 
 ## Output attendu :
 - Une classe `DDPM(nn.Module)` avec
-    - `forward(x_0, t)` : applique le bruit à une image propre
+    - `forward_noise(x_0, t)` : applique le bruit à une image propre
     - `denoising_step(x_t, t, model)` : applique le modèle pour générer l'image précédente (un peu moins bruité)
     - `sample(model)` : pipeline complète de génération d'une image
     - `loss_fn(model, x_0) ` retourne la loss (par ex MSE) entre le bruit estimé et vrai bruit.
