@@ -1,0 +1,1 @@
+# Définir les variables globales ici (par ex : batch_size) (voir /preprocessing/README.md)
