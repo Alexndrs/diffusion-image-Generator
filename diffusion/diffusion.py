@@ -53,19 +53,102 @@ class DDPM(nn.Module):
         return x_t
 
 
-    # 3. Noising successif (optionnel, pour visualisation étape par étape)
-    def q_sample_progressive(self, x_start: torch.Tensor):
-        """Génère une séquence d'images bruitées étape par étape"""
-        ...
+    # 3. Noising successif (pour visualisation étape par étape)
+    def forward_noise_progressive(self, x_start: torch.Tensor):
+        """
+        Génère une séquence d'images bruitées étape par étape
+        
+        input:
+        - x_start: image de départ (batch_size, channels, height, width)
+        
+        output:%
+        - x_seq: séquence d'images bruitées (num_timesteps, batch_size, channels, height, width)
+        """
+        batch_size = x_start.shape[0]
+        x_seq = [x_start]
+        x_t = x_start
+        
+        for t in range(self.num_timesteps):
+            # Calcul du facteur de bruit pour cette étape spécifique
+            alpha_t = self.alphas[t]
+            beta_t = self.betas[t]
+            
+            # Génération de nouveau bruit pour cette étape
+            noise = torch.randn_like(x_start).to(self.device)
+            
+            # Application du bruit à x_t pour obtenir x_{t+1}
+            # x_{t+1} = sqrt(alpha_t) * x_t + sqrt(1 - alpha_t) * noise
+            x_t = torch.sqrt(alpha_t).view(-1, 1, 1, 1) * x_t + torch.sqrt(beta_t).view(-1, 1, 1, 1) * noise
+            x_seq.append(x_t)
+        
+        # Convertir la liste en tensor
+        return torch.stack(x_seq, dim=0)
+
+        
 
     # 4. Calcul de la loss (training)
     def loss_fn(self, x_start: torch.Tensor):
-        """Implémente l'algo 1"""
-        ...
+        """Implémente l'algo 1
+            
+            x0 ~ q(x0)
+            t ~ U(1, T)
+            \eps ~ N(0, I)
+            Loss = || \eps - \eps_theta(x_t, t)||^2 with x_t = q(x_t | x0)
+
+            input : 
+            - x_start : image de départ (batch_size, channels, height, width)
+            
+        """
+        t = torch.randint(0, self.num_timesteps, (x_start.shape[0],), device=self.device).long()
+        noise = torch.randn_like(x_start).to(self.device)
+
+        # forward noise
+        x_t = self.forward_noise(x_start, t, noise)
+
+        # prdiction de noise
+        noise_pred = self.model(x_t, t)
+
+        # Loss : MSE entre les noises
+        loss = nn.MSELoss()(noise_pred, noise)
+        return loss
+
 
     # 5. Sampling (inférence)
     @torch.no_grad()
     def sample(self, shape: torch.Size):
-        """Implémente l'algo 2"""
-        ...
+        """Implémente l'algo 2
+        
+            x_T ~ N(0, I)
+            for t = T, ..., 1:
+                z ~ N(0, I) if t > 1 else 0
+                x_{t-1} = 1/sqrt(alpha_t) * (x_t - (1 - alpha_t) / sqrt(1 - alpha_bar_t) * \eps_theta(x_t, t)) + z * sqrt(beta_t)
+            endfor
+            return x_0 
+        
+            inputs:
+            - shape : (batch_size, channels, height, width)
+        """
+
+        # Bruit blanc initial
+        x_t = torch.randn(shape).to(self.device)
+
+        for t in range(self.num_timesteps - 1, -1, -1):
+            # Prédiction du bruit pour chaque bruit du batch
+            t_tensor = torch.full((shape[0],), t, device=self.device).long() # (batch_size,)
+            noise_pred = self.model(x_t, t_tensor)
+
+            # Calcule de x_{t-1}
+            alpha_t = self.alphas[t]
+            beta_t = self.betas[t]
+
+            if t > 0:
+                z = torch.randn_like(x_t).to(self.device)
+            else:
+                z = 0
+
+            x_t = (
+                (1 / torch.sqrt(alpha_t)) * (x_t - ((1 - alpha_t) / self.sqrt_1m_alpha_bar[t]) * noise_pred) + z * torch.sqrt(beta_t)
+            )
+
+        return x_t
 
