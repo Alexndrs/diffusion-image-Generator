@@ -33,4 +33,58 @@ class TimeEmbedding(nn.Module):
 
 
 class ResidualBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, time_channels: int,n_groups: int = 32, dropout: float = 0.1):
+        super().__init__()
+        
+        self.norm1 = nn.GroupNorm(n_groups, in_channels)    #groupe normalisation plutôt que batch nor
+        self.act1 = Swish()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1))
+        
+        self.norm2 = nn.GroupNorm(n_groups, out_channels)
+        self.act2 = Swish()
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=(3, 3), padding=(1, 1))
+        
+        if in_channels != out_channels:
+            self.shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=(1, 1))
+        else:
+            self.shortcut = nn.Identity()
+            
+        #embedding de t
+        self.time_emb = nn.Linear(time_channels, out_channels)
+        self.time_act = Swish()
+        self.dropout = nn.Dropout(dropout)
     
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        h = self.conv1(self.act1(self.norm1(x)))       #first convolution
+        h += self.time_emb(self.time_act(t))[:, :, None, None] #ajout du time embedding
+        h = self.conv2(self.dropout(self.act2(self.norm2(h))))     #second convolution
+        return h + self.shortcut(x)
+
+
+
+class AttentionBlock(nn.Module):
+    
+    
+    
+    
+class DownBlock(nn.Module):
+    
+    
+    
+class UpBlock(nn.Module):
+    
+    
+    
+class MiddleBlock(nn.Module):
+    
+    
+
+class Upsample(nn.Module):
+    
+    
+    
+class Downsample(nn.Module):
+    
+    
+    
+class UNet(nn.Module):
