@@ -3,12 +3,13 @@
 import os
 import kagglehub
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
-from torchvision.transforms import ToTensor, Resize, Compose, Normalize, RandomHorizontalFlip, RandomRotation, ColorJitter
+from torch.utils.data import Dataset, DataLoader, random_split, ConcatDataset, Subset
+from torchvision.transforms import ToTensor, Resize, Compose, Normalize, RandomHorizontalFlip, RandomAffine, ColorJitter
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import random
 
 
 class ImageDataset(Dataset):
@@ -94,32 +95,49 @@ class DatasetLoader:
             
         return image_paths
     
-    def _build_transforms(self):
-        transform_list = [Resize((self.img_size, self.img_size))]
-
-        if self.augmentation:
-            transform_list.extend([
-                RandomHorizontalFlip(p=0.5),
-                RandomRotation(degrees=10),
-                ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1)  # optionnel
-            ])
-        transform_list.append(ToTensor())
-        
-        if self.normalize:
-            transform_list.append(Normalize(mean=[0.5]*3, std=[0.5]*3))
-        return Compose(transform_list)
-    
     def load_data(self):
         print(f"Chargement des images depuis {self.dataset_path}...")
         self.image_paths = self._find_images()
         print(f"Trouvé {len(self.image_paths)} images")
 
-        transform = self._build_transforms()
-        full_dataset = ImageDataset(self.image_paths, transform=transform)
+
+        base_transform = Compose([
+            Resize((self.img_size, self.img_size)),
+            ToTensor(),
+            Normalize(mean=[0.5]*3, std=[0.5]*3) if self.normalize else lambda x: x
+        ])
+        base_dataset = ImageDataset(self.image_paths, transform=base_transform)
+
+
+        if self.augmentation:
+            aug_transform = Compose([
+                Resize((self.img_size, self.img_size)),
+                RandomHorizontalFlip(p=0.5),
+                RandomAffine(degrees=30, scale=(1.1, 1.5), fill=(0, 0, 0)),  # Zoom léger + rotation
+                ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),
+                ToTensor(),
+                Normalize(mean=[0.5]*3, std=[0.5]*3) if self.normalize else lambda x: x
+            ])
+            aug_dataset = ImageDataset(self.image_paths, transform=aug_transform)
+
+            # Combiner les datasets : originaux + augmentés
+            full_dataset = ConcatDataset([base_dataset, aug_dataset])
+            print(f"Dataset étendu à {len(full_dataset)} images (avec augmentation)")
+        else:
+            full_dataset = base_dataset
+        
+        indices = list(range(len(full_dataset)))
+        random.shuffle(indices)
 
         train_size = int(len(full_dataset) * self.train_ratio)
         val_size = len(full_dataset) - train_size
-        train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:]
+
+        train_dataset = Subset(full_dataset, train_indices)
+        val_dataset = Subset(full_dataset, val_indices)
+
 
         print(f"Split du dataset: {train_size} images d'entraînement, {val_size} images de validation")
 
@@ -143,7 +161,6 @@ class DatasetLoader:
             shuffle=True,
             num_workers=2,
             pin_memory=self.device == "cuda")
-        return self
 
     
     def get_data(self):
@@ -213,3 +230,4 @@ def download_kaggle_dataset(dataset_id):
     path = kagglehub.dataset_download(dataset_id)
     print(f"Dataset téléchargé dans: {path}")
     return path
+

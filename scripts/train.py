@@ -12,6 +12,12 @@ from diffusion.scheduler import make_beta_schedule
 import torch
 
 
+import os
+import json
+import time
+
+
+
 
 
 
@@ -25,6 +31,7 @@ if __name__ == "__main__":
         batch_size=16,
         train_ratio=0.8,
         normalize=True,
+
     )
     
     # Charger les données
@@ -47,8 +54,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Utilisation du device: {device}")
 
-    channels = 3    #RGB
-    n_channels = 64  # Nombre de canaux de base
+    channels = 3            #RGB
+    n_channels = 64         # Nombre de canaux de base
     ch_mults = (1, 2, 2, 4)  # Multiplicateurs de canaux par niveau
     is_attn = (False, False, True, True)  # Attention par niveau
     n_blocks = 2  # Nombre de blocs résiduels par niveau
@@ -72,20 +79,75 @@ if __name__ == "__main__":
     ddpm = DDPM(model=model, betas=betas, device=device)
     print(f"Nombre de timesteps: {len(ddpm.betas)}")
 
-    # Entraîner le modèle # Entrainement court pour tester le code
-    num_epochs = 3
+
+    # Entraîner le modèle
     lr = 1e-4
     optimizer = torch.optim.Adam(ddpm.parameters(), lr=lr)
 
-    for epoch in range(num_epochs):
-        loss = 0
+    # charger un checkpoint si disponible
+    checkpoint_path = "checkpoint.pth"
+    start_epoch = 0
+
+    if os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        ddpm.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = checkpoint["epoch"]
+        print(f"Checkpoint chargé. Reprise à l'epoch {start_epoch}")
+    else:
+        print("Aucun checkpoint trouvé. Entraînement à partir de zéro.")
+
+    # Logger
+    log_file = "train_log.json"
+    logs = []
+
+    if os.path.exists(log_file):
+        with open(log_file, "r") as f:
+            logs = json.load(f)
+
+    num_epochs = 2
+    save_every_n_batches = 75
+
+    for epoch in range(start_epoch, num_epochs):
+        epoch_start = time.time()
+        loss_epoch = 0.0
+
         for i, batch in enumerate(train_loader):
             x_start = batch.to(device)
-            loss += ddpm.train_batch(x_start, optimizer)
-            # print chariot pour afficher la progression
-            print(f"\rEpoch {epoch + 1}/{num_epochs}, Batch {i + 1}/{len(train_loader)}", end="")
-        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss / len(train_loader)}")
+            loss_batch = ddpm.train_batch(x_start, optimizer)
+            loss_epoch += loss_batch
 
-    # Enregistrer le modèle entraîné
-    torch.save(ddpm.state_dict(), "ddpm_model.pth")
-    print("Modèle entraîné et enregistré sous ddpm_model.pth")
+            # Log dans la console
+            print(f"\rEpoch {epoch + 1}/{num_epochs}, Batch {i + 1}/{len(train_loader)}, Loss: {loss_batch:.4f}", end="")
+
+            # Sauvegarde intermédiaire
+            if (i + 1) % save_every_n_batches == 0:
+                torch.save({
+                    "epoch": epoch,
+                    "batch": i,
+                    "model_state_dict": ddpm.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                }, checkpoint_path)
+                print(f"\nCheckpoint sauvegardé à l'epoch {epoch}, batch {i}")
+
+        avg_loss = loss_epoch / len(train_loader)
+        epoch_time = time.time() - epoch_start
+
+        # Sauvegarde du modèle complet
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": ddpm.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        }, checkpoint_path)
+
+        # Ajout au log
+        logs.append({
+            "epoch": epoch,
+            "avg_loss": avg_loss,
+            "time_sec": epoch_time
+        })
+
+        with open(log_file, "w") as f:
+            json.dump(logs, f, indent=2)
+
+        print(f"\nEpoch {epoch + 1} terminée, perte moyenne: {avg_loss:.4f}, durée: {epoch_time:.2f}s")

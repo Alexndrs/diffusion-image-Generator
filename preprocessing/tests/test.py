@@ -1,12 +1,13 @@
 # Exécuter depuis : la racine avec
 # python -m preprocessing.tests.test
 
-from preprocessing.dataset import DatasetLoader, download_kaggle_dataset
-from preprocessing.config import DATASET_PATH, IMG_SIZE, BATCH_SIZE, TRAIN_RATIO, NORMALIZE, AUGMENTATION
+from preprocessing.dataset import DatasetLoader #, download_kaggle_dataset
+from preprocessing.config import get_config
 
 
 if __name__ == "__main__":
-    #path = download_kaggle_dataset("brilja/pokemon-mugshots-from-super-mystery-dungeon")
+    DATASET_PATH, IMG_SIZE, BATCH_SIZE, TRAIN_RATIO, NORMALIZE, AUGMENTATION = get_config()
+
     
     # Créer et configurer le dataloader
     loader = DatasetLoader(
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     loader.load_data()
     
     # Visualiser un batch
-    loader.visualize_batch(nrow=4, save_path="batch_preview.png")
+    loader.visualize_batch(nrow=4, save_path="./preprocessing/tests/batch_preview.png")
     
     # Obtenir les dataloaders
     train_loader, val_loader, all_loader = loader.get_data()

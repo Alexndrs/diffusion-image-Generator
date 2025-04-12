@@ -75,7 +75,9 @@ if __name__ == "__main__":
 
     # Chargement des poids
     start = time.time()
-    ddpm.load_state_dict(torch.load("ddpm_model.pth", map_location=device))
+    # ddpm.load_state_dict(torch.load("ddpm_model.pth", map_location=device))
+    checkpoint = torch.load("checkpoint.pth")
+    ddpm.load_state_dict(checkpoint["model_state_dict"])
     end = time.time()
     print(f"Temps de chargement du modèle: {end - start:.2f} secondes")
 
