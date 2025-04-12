@@ -2,20 +2,20 @@
 # python -m preprocessing.tests.test
 
 from preprocessing.dataset import DatasetLoader, download_kaggle_dataset
-
+from preprocessing.config import DATASET_PATH, IMG_SIZE, BATCH_SIZE, TRAIN_RATIO, NORMALIZE, AUGMENTATION
 
 
 if __name__ == "__main__":
-    path = download_kaggle_dataset("brilja/pokemon-mugshots-from-super-mystery-dungeon")
+    #path = download_kaggle_dataset("brilja/pokemon-mugshots-from-super-mystery-dungeon")
     
     # Créer et configurer le dataloader
     loader = DatasetLoader(
-        dataset_path=path,
-        img_size=64,
-        batch_size=16,
-        train_ratio=0.8,
-        augmentation=True,
-        normalize=True,
+        dataset_path=DATASET_PATH,
+        img_size=IMG_SIZE,
+        batch_size=BATCH_SIZE,
+        train_ratio=TRAIN_RATIO,
+        normalize=NORMALIZE,
+        augmentation=AUGMENTATION,
     )
     
     # Charger les données
