@@ -4,7 +4,7 @@ import os
 import kagglehub
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
-from torchvision.transforms import ToTensor, Resize, Compose, Normalize
+from torchvision.transforms import ToTensor, Resize, Compose, Normalize, RandomHorizontalFlip, RandomRotation, ColorJitter
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
@@ -95,7 +95,16 @@ class DatasetLoader:
         return image_paths
     
     def _build_transforms(self):
-        transform_list = [Resize((self.img_size, self.img_size)), ToTensor()]
+        transform_list = [Resize((self.img_size, self.img_size))]
+
+        if self.augmentation:
+            transform_list.extend([
+                RandomHorizontalFlip(p=0.5),
+                RandomRotation(degrees=10),
+                ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1)  # optionnel
+            ])
+        transform_list.append(ToTensor())
+        
         if self.normalize:
             transform_list.append(Normalize(mean=[0.5]*3, std=[0.5]*3))
         return Compose(transform_list)

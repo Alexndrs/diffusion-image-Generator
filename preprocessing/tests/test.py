@@ -14,6 +14,7 @@ if __name__ == "__main__":
         img_size=64,
         batch_size=16,
         train_ratio=0.8,
+        augmentation=True,
         normalize=True,
     )
     
