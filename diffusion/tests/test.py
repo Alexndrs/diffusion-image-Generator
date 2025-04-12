@@ -59,11 +59,12 @@ def test_progressive_forward_noise():
     print(f"Utilisation du device: {device}")
 
     # Charger et transformer l'image
-    img_path = "./diffusion/tests/images/imageTest.png"
+    # img_path = "./diffusion/tests/images/imageTest.png"
+    img_path = "./diffusion/tests/images/test_pokemon.png"
     image = Image.open(img_path).convert("RGB")
 
     transform = T.Compose([
-        T.Resize((image.size[1] // 4, image.size[0] // 4)),  # Réduire la taille
+        # T.Resize((image.size[1] // 4, image.size[0] // 4)),  # Réduire la taille
         T.ToTensor(),  # convert to [0,1]
         T.Normalize([0.5]*3, [0.5]*3),  # normalize to [-1, 1]
     ])
@@ -174,7 +175,8 @@ def test_progressive_forward_noise():
     ani = FuncAnimation(fig, update, frames=frames, init_func=init, blit=True)
     
     # Sauvegarder l'animation
-    save_path = "./diffusion/tests/images/progressive_noising/animation.mp4"
+    image_name = os.path.basename(img_path).split('.')[0]
+    save_path = f"./diffusion/tests/images/progressive_noising/animation_{image_name}.mp4"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     print(f"Sauvegarde de l'animation à {save_path}...")

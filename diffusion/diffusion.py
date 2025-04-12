@@ -20,8 +20,8 @@ class DDPM(nn.Module):
         self.betas = betas.to(device)
         self.alphas = 1. - betas
         self.alpha_bar = torch.cumprod(self.alphas, dim=0)
-        self.alpha_bar_sqrt = torch.sqrt(self.alpha_bar)
-        self.sqrt_1m_alpha_bar = torch.sqrt(1. - self.alpha_bar)
+        self.alpha_bar_sqrt = torch.sqrt(self.alpha_bar).to(device)
+        self.sqrt_1m_alpha_bar = torch.sqrt(1. - self.alpha_bar).to(device)
 
 
 
@@ -70,8 +70,8 @@ class DDPM(nn.Module):
         
         for t in range(self.num_timesteps):
             # Calcul du facteur de bruit pour cette étape spécifique
-            alpha_t = self.alphas[t]
-            beta_t = self.betas[t]
+            alpha_t = self.alphas[t].to(self.device)
+            beta_t = self.betas[t].to(self.device)
             
             # Génération de nouveau bruit pour cette étape
             noise = torch.randn_like(x_start).to(self.device)
@@ -105,17 +105,44 @@ class DDPM(nn.Module):
         # forward noise
         x_t = self.forward_noise(x_start, t, noise)
 
-        # prdiction de noise
+        # prdiction de noise : les tenseurs x_t et t sont bien sur le meme device (GPU)
         noise_pred = self.model(x_t, t)
 
         # Loss : MSE entre les noises
         loss = nn.MSELoss()(noise_pred, noise)
         return loss
+    
+
+    # 5. Training
+    def train_batch(self, batch: torch.Tensor, optimizer: torch.optim.Optimizer):
+        """
+            Effectue une étape d'entraînement sur un batch d'images
+            
+            inputs:
+            - batch: batch d'images (batch_size, channels, height, width)
+            - optimizer: optimiseur pour mettre à jour les poids du modèle
+            
+            returns:
+            - loss: valeur de la perte pour ce batch
+        """
+        # S'assurer que le batch est sur le bon device
+        batch = batch.to(self.device)
+        
+        optimizer.zero_grad()
+        loss = self.loss_fn(batch)
+        
+        # Backprop
+        loss.backward()
+        
+        # Mise à jour des poids
+        optimizer.step()
+        
+        return loss.item()
 
 
-    # 5. Sampling (inférence)
+    # 6. Sampling (inférence)
     @torch.no_grad()
-    def sample(self, shape: torch.Size):
+    def sample(self, shape: torch.Size, save_intermediate: bool = False):
         """Implémente l'algo 2
         
             x_T ~ N(0, I)
@@ -127,19 +154,23 @@ class DDPM(nn.Module):
         
             inputs:
             - shape : (batch_size, channels, height, width)
+            output : (time_steps, batch_size, channels, height, width) (si save_intermediate = True) ou (1, batch_size, channels, height, width) 
         """
 
         # Bruit blanc initial
         x_t = torch.randn(shape).to(self.device)
+        res = []
 
         for t in range(self.num_timesteps - 1, -1, -1):
             # Prédiction du bruit pour chaque bruit du batch
             t_tensor = torch.full((shape[0],), t, device=self.device).long() # (batch_size,)
+
+            # les tensors x_t et t_tensor sont bien sur le meme device (GPU)
             noise_pred = self.model(x_t, t_tensor)
 
             # Calcule de x_{t-1}
-            alpha_t = self.alphas[t]
-            beta_t = self.betas[t]
+            alpha_t = self.alphas[t].to(self.device)
+            beta_t = self.betas[t].to(self.device)
 
             if t > 0:
                 z = torch.randn_like(x_t).to(self.device)
@@ -149,6 +180,11 @@ class DDPM(nn.Module):
             x_t = (
                 (1 / torch.sqrt(alpha_t)) * (x_t - ((1 - alpha_t) / self.sqrt_1m_alpha_bar[t]) * noise_pred) + z * torch.sqrt(beta_t)
             )
+            if save_intermediate:
+                res.append(x_t.cpu().numpy())
+        
+        if not save_intermediate:
+            res.append(x_t.cpu().numpy())
 
-        return x_t
-
+        return res
+    

@@ -61,7 +61,6 @@ class ResidualBlock(nn.Module):
         return h + self.shortcut(x)
 
 
-
 class AttentionBlock(nn.Module):
     def __init__(self, n_channels: int, n_heads: int = 1, d_k: int = None, n_groups: int = 32):
         super().__init__()
@@ -103,6 +102,7 @@ class DownBlock(nn.Module):    #This combines ResidualBlock and AttentionBlock .
         h = self.res(x, t)
         h = self.attn(h)
         return h
+
     
 class UpBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_channels: int, has_attn: bool):
@@ -117,8 +117,8 @@ class UpBlock(nn.Module):
         h = self.res(x, t)
         h = self.attn(h)
         return h
-    
-    
+
+
 
 class MiddleBlock(nn.Module):    #It combines a ResidualBlock , AttentionBlock , followed by another ResidualBlock . This block is applied at the lowest resolution of the U-Net.
     def __init__(self, n_channels: int, time_channels: int):

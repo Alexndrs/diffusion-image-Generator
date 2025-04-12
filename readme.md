@@ -14,23 +14,28 @@ Implementation du papier
 ├── preprocessing/
 │   ├── dataset.py
 │   ├── config.py
-│   └── tests/
+│   ├── tests/
 │   └── readme.md
 ├── model/
 │   ├── unet.py
+│   ├── readme.md
 │   └── tests/
-│   └── readme.md
+│         ├── test.py
+│         └── images/
 ├── diffusion/
 │   ├── __init__.py
 │   ├── diffusion.py
-│   └── readme.md
+│   ├── readme.md
 │   └── tests/
 │         ├── test.py
 │         └── images/
 ├── scripts/
 │   ├── train.py
-│   └── generate.py
+│   ├── generate.py
 │   └── generations/
+│         └── seed/
+│           ├── images/les_images.png
+│           └── video.mp4
 ├── README.md
 └── requirements.txt
 ```
