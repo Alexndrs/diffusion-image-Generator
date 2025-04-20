@@ -6,8 +6,10 @@
 # python -m scripts.train
 
 from preprocessing.dataset import DatasetLoader, download_kaggle_dataset
-from model.unet import UNet
-from diffusion.diffusion import DDPM
+from model.improved_unet import UNetModel
+# from diffusion.diffusion import DDPM
+from diffusion import gaussian_diffusion as gd
+from diffusion.respace import SpacedDiffusion, space_timesteps
 from diffusion.scheduler import make_beta_schedule
 import torch
 
@@ -29,9 +31,9 @@ if __name__ == "__main__":
         dataset_path=path,
         img_size=64,
         batch_size=32,
-        train_ratio=0.8,
+        train_ratio=1,
         normalize=True,
-        augmentation=False
+        augmentation=True
     )
     
     # Charger les données
@@ -61,13 +63,18 @@ if __name__ == "__main__":
     n_blocks = 2  # Nombre de blocs résiduels par niveau
 
 
-    model = UNet(
-        image_channels=channels,
-        n_channels=n_channels,
-        ch_mults=ch_mults,
-        is_attn=is_attn,
-        n_blocks=n_blocks
-    ).to(device)
+    # model = UNet(
+    #     image_channels=channels,
+    #     n_channels=n_channels,
+    #     ch_mults=ch_mults,
+    #     is_attn=is_attn,
+    #     n_blocks=n_blocks
+    # ).to(device)
+
+
+    model = UNetModel().to(device)
+
+
 
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Nombre de paramètres du modèle: {n_params:,}")
@@ -75,22 +82,46 @@ if __name__ == "__main__":
 
     # Créer le modèle DDPM
     timesteps = 1000
+    predict_xstart = False
+    rescale_timesteps = False
+    rescale_learned_sigmas=False
+    sigma_small=False
+    learn_sigma=False
+    loss_type = gd.LossType.MSE # alternatives: MSE, RESCALED_MSE, RESCALED_KL
     betas = make_beta_schedule(schedule="cosine", timesteps=timesteps)
-    ddpm = DDPM(model=model, betas=betas, device=device)
+    ddpm = SpacedDiffusion(
+        use_timesteps=space_timesteps(timesteps),
+        betas=betas,
+        model_mean_type=(
+            gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
+        ),
+        model_var_type=(
+            (
+                gd.ModelVarType.FIXED_LARGE
+                if not sigma_small
+                else gd.ModelVarType.FIXED_SMALL
+            )
+            if not learn_sigma
+            else gd.ModelVarType.LEARNED_RANGE
+        ),
+        loss_type=loss_type,
+        rescale_timesteps=rescale_timesteps,
+    )
+
     print(f"Nombre de timesteps: {len(ddpm.betas)}")
 
 
     # Entraîner le modèle
     lr = 1e-4
-    optimizer = torch.optim.Adam(ddpm.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # charger un checkpoint si disponible
-    checkpoint_path = "checkpoint.pt"
+    checkpoint_path = "checkpoint_improved.pt"
     start_epoch = 0
 
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
-        ddpm.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"]
         print(f"Checkpoint chargé. Reprise à l'epoch {start_epoch}")
@@ -105,7 +136,7 @@ if __name__ == "__main__":
         with open(log_file, "r") as f:
             logs = json.load(f)
 
-    num_epochs = 2
+    num_epochs = 40
     save_every_n_batches = len(train_loader) // 2
 
     for epoch in range(start_epoch, num_epochs):
@@ -114,8 +145,20 @@ if __name__ == "__main__":
 
         for i, batch in enumerate(train_loader):
             x_start = batch.to(device)
-            loss_batch = ddpm.train_batch(x_start, optimizer)
-            loss_epoch += loss_batch
+            optimizer.zero_grad()
+
+            # Générer des timesteps aléatoires pour chaque batch
+            t = torch.randint(0, ddpm.num_timesteps, (x_start.size(0),), device=device)
+
+            # Calculer la perte avec la méthode `training_losses`
+            loss_dict = ddpm.training_losses(model, x_start, t)
+            loss_batch = loss_dict["loss"].mean()  # Moyenne de la perte sur le batch
+
+            # Backpropagation et mise à jour des poids
+            loss_batch.backward()
+            optimizer.step()
+
+            loss_epoch += loss_batch.item()
 
             # Log dans la console
             print(f"\rEpoch {epoch + 1}/{num_epochs}, Batch {i + 1}/{len(train_loader)}, Loss: {loss_batch:.4f}", end="")
@@ -125,7 +168,7 @@ if __name__ == "__main__":
                 torch.save({
                     "epoch": epoch,
                     "batch": i,
-                    "model_state_dict": ddpm.state_dict(),
+                    "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                 }, checkpoint_path)
                 print(f"\nCheckpoint sauvegardé à l'epoch {epoch}, batch {i}")
@@ -136,7 +179,7 @@ if __name__ == "__main__":
         # Sauvegarde du modèle complet
         torch.save({
             "epoch": epoch,
-            "model_state_dict": ddpm.state_dict(),
+            "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         }, checkpoint_path)
 

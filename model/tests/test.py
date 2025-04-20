@@ -16,8 +16,9 @@ import time
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model.unet import UNet
+from model.improved_unet import UNetModel
 
-def test_unet_forward():
+def test_unet_forward(model_to_test="UNet"):
     # Vérifier si CUDA est disponible
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Utilisation du device: {device}")
@@ -50,13 +51,16 @@ def test_unet_forward():
     is_attn = (False, False, True, True)  # Attention par niveau
     n_blocks = 2  # Nombre de blocs résiduels par niveau
     
-    model = UNet(
-        image_channels=channels,
-        n_channels=n_channels,
-        ch_mults=ch_mults,
-        is_attn=is_attn,
-        n_blocks=n_blocks
-    ).to(device)
+    if model_to_test == "UNet":
+        model = UNet(
+            image_channels=channels,
+            n_channels=n_channels,
+            ch_mults=ch_mults,
+            is_attn=is_attn,
+            n_blocks=n_blocks
+        ).to(device)
+    else:
+        model = UNetModel().to(device)
     
     # Afficher le nombre de paramètres du modèle
     n_params = sum(p.numel() for p in model.parameters())
@@ -121,4 +125,4 @@ def test_unet_forward():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_unet_forward()
+    test_unet_forward(model_to_test="UNetImproved")

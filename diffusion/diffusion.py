@@ -24,7 +24,6 @@ class DDPM(nn.Module):
         self.sqrt_1m_alpha_bar = torch.sqrt(1. - self.alpha_bar).to(device)
 
 
-
     # 2. Noising instantané
     def forward_noise(self, x_start: torch.Tensor, t: torch.Tensor, noise: torch.Tensor = None):
         """
@@ -161,6 +160,9 @@ class DDPM(nn.Module):
         x_t = torch.randn(shape).to(self.device)
         res = []
 
+        if save_intermediate:
+            res.append(x_t.cpu().detach().clone())
+            
         for t in range(self.num_timesteps - 1, -1, -1):
             # Prédiction du bruit pour chaque bruit du batch
             t_tensor = torch.full((shape[0],), t, device=self.device).long() # (batch_size,)
@@ -170,16 +172,25 @@ class DDPM(nn.Module):
 
             # Calcule de x_{t-1}
             alpha_t = self.alphas[t].to(self.device)
+            alpha_bar_t = self.alpha_bar[t].to(self.device)
             beta_t = self.betas[t].to(self.device)
+            alpha_bar_prev = self.alpha_bar[t-1] if t > 0 else torch.tensor(1.0).to(self.device)
+
+            # Coefficient pour la prédiction
+            c1 = torch.sqrt(1.0 / alpha_t)
+            c2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_bar_t)
+            
+            # Prédiction de la moyenne
+            pred_mean = c1 * (x_t - c2 * noise_pred)
 
             if t > 0:
-                z = torch.randn_like(x_t).to(self.device)
+                noise = torch.randn_like(x_t).to(self.device)
+                sigma_t = torch.sqrt(self.betas[t] * (1.0 - alpha_bar_prev) / (1.0 - alpha_bar_t))
+                x_t = pred_mean + sigma_t * noise
             else:
-                z = 0
+                x_t = pred_mean
 
-            x_t = (
-                (1 / torch.sqrt(alpha_t)) * (x_t - ((1 - alpha_t) / self.sqrt_1m_alpha_bar[t]) * noise_pred) + z * torch.sqrt(beta_t)
-            )
+
             if save_intermediate:
                 res.append(x_t.cpu().numpy())
         

@@ -47,6 +47,7 @@ def test_instant_forward_noise():
 
 # Ajouter cette fonction à test.py
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 import numpy as np
 from matplotlib.animation import FuncAnimation
 import matplotlib.gridspec as gridspec
@@ -72,7 +73,8 @@ def test_progressive_forward_noise():
 
     # Créer le scheduler beta et le DDPM (model=None car inutile ici)
     timesteps = 1000  # Réduire pour une génération plus rapide
-    betas = make_beta_schedule(schedule="linear", timesteps=timesteps)
+    schedule_type = "cosine"  
+    betas = make_beta_schedule(schedule=schedule_type, timesteps=timesteps)
     ddpm = DDPM(model=None, betas=betas, device=device)
 
     # Générer la séquence complète d'images bruitées
@@ -176,15 +178,66 @@ def test_progressive_forward_noise():
     
     # Sauvegarder l'animation
     image_name = os.path.basename(img_path).split('.')[0]
-    save_path = f"./diffusion/tests/images/progressive_noising/animation_{image_name}.mp4"
+    save_path = f"./diffusion/tests/images/progressive_noising/animation_{image_name}_{schedule_type}.mp4"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
-    print(f"Sauvegarde de l'animation à {save_path}...")
-    ani.save(save_path, writer='ffmpeg', fps=18, dpi=100)
-    
-    print("✅ Test de noising progressif terminé. Animation sauvegardée.")
+    frames = list(range(0, len(noisy_seq), 10))  # échantillonnage des frames
+    if frames[-1] != len(noisy_seq) - 1:
+        frames.append(len(noisy_seq) - 1)  # s'assurer d'inclure la dernière frame
 
+    # Créer un writer pour ffmpeg
+    writer = FFMpegWriter(fps=18, metadata=dict(artist='Me'), bitrate=1800)
+
+    # Sauvegarder les frames avec une barre de progression
+    with writer.saving(fig, save_path, dpi=50):
+        for frame in tqdm(frames, desc="Sauvegarde des frames"):
+            update(frame)  # Mettre à jour la frame
+            writer.grab_frame()  # Sauvegarder la frame actuelle
+
+    print("✅ Animation sauvegardée avec succès.")
+
+
+
+# Afficher la courbe d'évolution des différents schedules sur un même graphique
+def plot_beta_schedules():
+    timesteps = 1000
+    schedules = ["linear", "cosine", "quadratic"]
+    betas_list = [make_beta_schedule(schedule=schedule, timesteps=timesteps) for schedule in schedules]
+
+    print(len(betas_list[0]), len(betas_list[1]), len(betas_list[2]))
+
+    plt.figure(figsize=(10, 6))
+    for betas, schedule in zip(betas_list, schedules):
+        plt.plot(betas.numpy(), label=schedule)
+
+    plt.title("Beta Schedules")
+    plt.xlabel("Timesteps")
+    plt.ylabel("Beta Value")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_alpha_cumprod_schedules():
+    timesteps = 1000
+    schedules = ["linear", "cosine", "quadratic"]
+    betas_list = [make_beta_schedule(schedule=schedule, timesteps=timesteps) for schedule in schedules]
+
+    alphas_cumprod_list = [torch.cumprod(1 - betas, dim=0) for betas in betas_list]
+
+    print(len(alphas_cumprod_list[0]), len(alphas_cumprod_list[1]), len(alphas_cumprod_list[2]))
+    plt.figure(figsize=(10, 6))
+    for alphas_cumprod, schedule in zip(alphas_cumprod_list, schedules):
+        plt.plot(alphas_cumprod.numpy(), label=schedule)
+    
+    plt.title("Alpha Cumulative Product Schedules (quantity of signal)")
+    plt.xlabel("Timesteps")
+    plt.ylabel("Alpha Cumulative Product Value")
+    plt.legend()
+    plt.grid()
+    plt.show()
 
 if __name__ == "__main__":
     # test_instant_forward_noise()
-    test_progressive_forward_noise()
+    # test_progressive_forward_noise()
+    # plot_beta_schedules()
+    plot_alpha_cumprod_schedules()

@@ -156,8 +156,14 @@ class Downsample(nn.Module):        #Scale down the feature map by 21​×
         
     
 class UNet(nn.Module):
-    def __init__(self, image_channels: int = 3, n_channels: int = 64, ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
-                 is_attn: Union[Tuple[bool, ...], List[bool]] = (False, False, True, True),n_blocks: int = 2):
+    def __init__(
+            self, 
+            image_channels: int = 3, 
+            n_channels: int = 64, 
+            ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
+            is_attn: Union[Tuple[bool, ...], List[bool]] = (False, False, True, True),
+            n_blocks: int = 2
+        ):
         super().__init__()
         n_resolutions = len(ch_mults)
         self.image_proj = nn.Conv2d(image_channels, n_channels, kernel_size=(3, 3), padding=(1, 1))  #Project image into feature map 
