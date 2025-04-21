@@ -1,21 +1,23 @@
+#Implémentation inspirée de nn.labml.ai
+
 from typing import Optional, Tuple, Union, List
 import torch
 import math
 from torch import nn
 
 
-#activation function : swish
+# fonction d'activation : Swish (x*sigmoid) ou SiLU 
 class Swish(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(x)
 
-
+# classe qui permet de générer un embedding de t
 class TimeEmbedding(nn.Module):
     def __init__(self, n_channels: int):
         super().__init__()
         self.activation = Swish()
         self.n_channels = n_channels
-        self.linear1 = nn.Linear(self.n_channels//4, self.n_channels)      # n//4 en entrée car on prendra un vecteur d'embedding de t générer par un sinusoidal encoding
+        self.linear1 = nn.Linear(self.n_channels//4, self.n_channels)   # n//4 en entrée car on prendra un vecteur d'embedding de t générer par un sinusoidal encoding
         self.linear2 = nn.Linear(self.n_channels, self.n_channels)
         
     def forward(self, t: torch.Tensor) -> torch.Tensor:
@@ -31,12 +33,12 @@ class TimeEmbedding(nn.Module):
         emb = self.linear2(emb)
         return emb
 
-
+# classe qui implémente les blocs résiduels
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_channels: int,n_groups: int = 32, dropout: float = 0.1):
         super().__init__()
         
-        self.norm1 = nn.GroupNorm(n_groups, in_channels)    #groupe normalisation plutôt que batch nor
+        self.norm1 = nn.GroupNorm(n_groups, in_channels)    #groupe normalisation plutôt que batch normalisation pour ne pas dépendre de la taille du batch
         self.act1 = Swish()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=(3, 3), padding=(1, 1))
         
@@ -60,7 +62,7 @@ class ResidualBlock(nn.Module):
         h = self.conv2(self.dropout(self.act2(self.norm2(h))))     #second convolution
         return h + self.shortcut(x)
 
-
+# classe qui implémente le bloc d'attention
 class AttentionBlock(nn.Module):
     def __init__(self, n_channels: int, n_heads: int = 1, d_k: int = None, n_groups: int = 32):
         super().__init__()
@@ -74,7 +76,7 @@ class AttentionBlock(nn.Module):
         self.d_k = d_k
         
     def forward(self, x: torch.Tensor, t: Optional[torch.Tensor] = None):
-        _ = t #t is not used, but it's kept in the arguments because for the attention layer function signature to match with ResidualBlock
+        _ = t #t n'est pas utilisé ici
         batch_size, n_channels, height, width = x.shape
         x = x.view(batch_size, n_channels, -1).permute(0, 2, 1)
         qkv = self.projection(x).view(batch_size, -1, self.n_heads, 3 * self.d_k)
@@ -88,8 +90,8 @@ class AttentionBlock(nn.Module):
         res = res.permute(0, 2, 1).view(batch_size, n_channels, height, width)
         return res
     
-    
-class DownBlock(nn.Module):    #This combines ResidualBlock and AttentionBlock . These are used in the first half of U-Net at each resolution.
+# première partie du UNet (descente)
+class DownBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_channels: int, has_attn: bool):
         super().__init__()
         self.res = ResidualBlock(in_channels, out_channels, time_channels)
@@ -103,7 +105,7 @@ class DownBlock(nn.Module):    #This combines ResidualBlock and AttentionBlock .
         h = self.attn(h)
         return h
 
-    
+# deuxième partie du UNet (montée)
 class UpBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, time_channels: int, has_attn: bool):
         super().__init__()
@@ -119,8 +121,8 @@ class UpBlock(nn.Module):
         return h
 
 
-
-class MiddleBlock(nn.Module):    #It combines a ResidualBlock , AttentionBlock , followed by another ResidualBlock . This block is applied at the lowest resolution of the U-Net.
+# bloc le plus profond
+class MiddleBlock(nn.Module):
     def __init__(self, n_channels: int, time_channels: int):
         super().__init__()
         self.res1 = ResidualBlock(n_channels, n_channels, time_channels)
@@ -144,7 +146,7 @@ class Upsample(nn.Module):            #Scale up the feature map by 2×
         h = self.conv(x)
         return h
     
-class Downsample(nn.Module):        #Scale down the feature map by 21​×
+class Downsample(nn.Module):        #Scale down the feature map by 2​×
     def __init__(self, n_channels):
         super().__init__()
         self.conv = nn.Conv2d(n_channels, n_channels, (3, 3), (2, 2), (1, 1))
@@ -200,19 +202,19 @@ class UNet(nn.Module):
         x = self.image_proj(x)
         h = [x]
         
-        for m in self.down:        #First half of U-Net 
+        for m in self.down:        #première partie du UNet 
             x = m(x,t)
             h.append(x)
             
         x = self.middle(x, t)       #bottom of the UNet
         
-        for m in self.up:            #Second half of U-Net 
+        for m in self.up:            #deuxième partie du UNet
             if isinstance(m, Upsample):
                 x = m(x, t)
-            else:               #Get the skip connection from first half of U-Net and concatenate 
+            else:
                 s = h.pop()
                 x = torch.cat((x, s), dim=1)
                 x = m(x, t)
-        return self.final(self.act(self.norm(x)))  #final normalization and activation before output  
+        return self.final(self.act(self.norm(x)))  
         
         
