@@ -7,9 +7,7 @@
 
 from preprocessing.dataset import DatasetLoader, download_kaggle_dataset
 from model.improved_unet import UNetModel
-# from diffusion.diffusion import DDPM
-from diffusion import gaussian_diffusion as gd
-from diffusion.respace import SpacedDiffusion, space_timesteps
+from diffusion.gaussian_diffusion import GaussianDiffusion
 from diffusion.scheduler import make_beta_schedule
 import torch
 
@@ -82,29 +80,10 @@ if __name__ == "__main__":
 
     # Créer le modèle DDPM
     timesteps = 1000
-    predict_xstart = False
     rescale_timesteps = False
-    rescale_learned_sigmas=False
-    sigma_small=False
-    learn_sigma=False
-    loss_type = gd.LossType.MSE # alternatives: MSE, RESCALED_MSE, RESCALED_KL
     betas = make_beta_schedule(schedule="cosine", timesteps=timesteps)
-    ddpm = SpacedDiffusion(
-        use_timesteps=space_timesteps(timesteps),
+    ddpm = GaussianDiffusion(
         betas=betas,
-        model_mean_type=(
-            gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
-        ),
-        model_var_type=(
-            (
-                gd.ModelVarType.FIXED_LARGE
-                if not sigma_small
-                else gd.ModelVarType.FIXED_SMALL
-            )
-            if not learn_sigma
-            else gd.ModelVarType.LEARNED_RANGE
-        ),
-        loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,
     )
 
@@ -136,7 +115,7 @@ if __name__ == "__main__":
         with open(log_file, "r") as f:
             logs = json.load(f)
 
-    num_epochs = 40
+    num_epochs = 300
     save_every_n_batches = len(train_loader) // 2
 
     for epoch in range(start_epoch, num_epochs):
@@ -151,8 +130,8 @@ if __name__ == "__main__":
             t = torch.randint(0, ddpm.num_timesteps, (x_start.size(0),), device=device)
 
             # Calculer la perte avec la méthode `training_losses`
-            loss_dict = ddpm.training_losses(model, x_start, t)
-            loss_batch = loss_dict["loss"].mean()  # Moyenne de la perte sur le batch
+            loss_batch = ddpm.training_losses(model, x_start, t)
+            loss_batch = loss_batch.mean()  # Moyenne de la perte sur le batch
 
             # Backpropagation et mise à jour des poids
             loss_batch.backward()

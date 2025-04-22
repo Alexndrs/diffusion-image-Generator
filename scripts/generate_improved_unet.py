@@ -3,8 +3,7 @@
 
 from preprocessing.dataset import DatasetLoader, download_kaggle_dataset
 from model.improved_unet import UNetModel
-from diffusion import gaussian_diffusion as gd
-from diffusion.respace import SpacedDiffusion, space_timesteps
+from diffusion.gaussian_diffusion import GaussianDiffusion
 from diffusion.scheduler import make_beta_schedule
 import torch
 from PIL import Image
@@ -68,29 +67,10 @@ if __name__ == "__main__":
     betas = make_beta_schedule(schedule="cosine", timesteps=1000)
     # Créer le modèle DDPM
     timesteps = 1000
-    predict_xstart = False
     rescale_timesteps = False
-    rescale_learned_sigmas=False
-    sigma_small=False
-    learn_sigma=False
-    loss_type = gd.LossType.MSE # alternatives: MSE, RESCALED_MSE, RESCALED_KL
     betas = make_beta_schedule(schedule="cosine", timesteps=timesteps)
-    ddpm = SpacedDiffusion(
-        use_timesteps=space_timesteps(timesteps),
+    ddpm = GaussianDiffusion(
         betas=betas,
-        model_mean_type=(
-            gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
-        ),
-        model_var_type=(
-            (
-                gd.ModelVarType.FIXED_LARGE
-                if not sigma_small
-                else gd.ModelVarType.FIXED_SMALL
-            )
-            if not learn_sigma
-            else gd.ModelVarType.LEARNED_RANGE
-        ),
-        loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,
     )
 
@@ -109,12 +89,13 @@ if __name__ == "__main__":
     print(f"Génération d’un batch de {batch_size} images...")
     start = time.time()
     # Génération d'images avec la méthode `p_sample_loop`
-    progressive_samples = ddpm.p_sample_loop_progressive(
+    progressive_samples = ddpm.sample_loop_progressive(
         model=model,
         shape=image_shape,
         noise=None,  # Bruit initial (None pour générer un bruit aléatoire)
         clip_denoised=True,  # Clip les valeurs générées entre [-1, 1]
-        progress=True  # Affiche une barre de progression
+        progress=True,  # Affiche une barre de progression
+        device="cuda"  
     )
 
     all_timesteps = []
